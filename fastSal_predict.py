@@ -15,7 +15,7 @@ class img_dataset(Dataset):
         if isdir(img_path):
             print('image folder is {}'.format(img_path))
             file_list = [f for f in listdir(img_path) if isfile(join(img_path, f))]
-            file_list = [f for f in file_list if '.jpg' in f or 'jpeg' in f or 'png' in f and not 'out' in f]
+            file_list = [f for f in file_list if ('.jpg' in f or 'jpeg' in f or 'png' in f) and not 'out' in f]
             self.file_list = np.asarray(file_list)
             self.dir = img_path
         elif isfile(img_path):
@@ -49,10 +49,13 @@ def predict(model_type, finetune_dataset, input_path, output_path,
         if gpu:
             x = x.float().cuda()
         y = model(x)
+
+
         if not probability_output: y = nn.Sigmoid()(y)
         if gpu:
             y = y.detach().cpu()
         y = y.detach().numpy()
+
         for i, prediction in enumerate(y[:, 0, :, :]):
             img_output_path = output_path_list[i]
             original_size = original_size_list[i].numpy()
