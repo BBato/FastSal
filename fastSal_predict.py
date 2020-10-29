@@ -15,7 +15,7 @@ class img_dataset(Dataset):
         if isdir(img_path):
             print('image folder is {}'.format(img_path))
             file_list = [f for f in listdir(img_path) if isfile(join(img_path, f))]
-            file_list = [f for f in file_list if '.jpg' in f or 'jpeg' in f or 'png' in f]
+            file_list = [f for f in file_list if '.jpg' in f or 'jpeg' in f or 'png' in f and not 'out' in f]
             self.file_list = np.asarray(file_list)
             self.dir = img_path
         elif isfile(img_path):
@@ -26,7 +26,7 @@ class img_dataset(Dataset):
     def __getitem__(self, item):
         if self.dir:
             img_path = join(self.dir, self.file_list[item])
-            output_path = join(self.output_dir, 'out_' + self.file_list[item])
+            output_path = join(self.output_dir, self.file_list[item].split('.')[0] + '_out.' + self.file_list[item].split('.')[1])
         else:
             img_path = self.file_list[item]
             output_path = self.output_dir
@@ -52,7 +52,7 @@ def predict(model_type, finetune_dataset, input_path, output_path,
         if not probability_output: y = nn.Sigmoid()(y)
         if gpu:
             y = y.detach().cpu()
-        y = y.numpy()
+        y = y.detach().numpy()
         for i, prediction in enumerate(y[:, 0, :, :]):
             img_output_path = output_path_list[i]
             original_size = original_size_list[i].numpy()
@@ -84,7 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('-probability_output', action='store', dest='probability_output',
                         help='use probability_output or not', default=False, type=bool)
     parser.add_argument('-gpu', action='store', dest='gpu',
-                        help='use gpu or not', default=True, type=bool)
+                        help='use gpu or not', default=False, type=bool)
     args = parser.parse_args()
 
     predict(args.model_type, args.finetune_dataset, args.input_path, args.output_path,
