@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 from PIL import Image
 from generate_img import post_process_png, post_process_probability2
+import time
 
 def convert_vgg_img(src, target_size):
     vgg_img = src
@@ -31,6 +32,8 @@ if __name__ == '__main__':
 
     while(True): 
         
+        t1 = time.process_time()
+
         # Capture the video frame by frame 
         ret, frame = vid.read() 
         
@@ -58,6 +61,12 @@ if __name__ == '__main__':
 
         if cv2.waitKey(1) & 0xFF == ord('q'): 
             break
+
+        t2 = time.process_time()
+        interval = (t2-t1)
+        fps = 1/interval
+        print("FPS: "+str(fps))
+
     
     # After the loop release the cap object 
     vid.release() 
