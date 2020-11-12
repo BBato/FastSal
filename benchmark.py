@@ -16,49 +16,53 @@ if __name__ == '__main__':
         model = fastsal.fastsal(pretrain_mode=False, model_type='A')
         state_dict, opt_state = load_weight(coco_a, remove_decoder=False)
         model.load_state_dict(state_dict)
-        t1 = time.process_time()
+        t1 = time.time()
         for i in range(0,3):
             y = model(x)
             print("x")
-        t2 = time.process_time()
+        t2 = time.time()
         interval = (t2-t1)/3
         fps = 1/interval
-        print("Average time FPS for coco_A was "+str(fps))
+        print("Average FPS for coco_A was "+str(fps))
+        print("Average time for coco_A was "+str(interval))
 
         model = fastsal.fastsal(pretrain_mode=False, model_type='A')
         state_dict, opt_state = load_weight(salicon_a, remove_decoder=False)
         model.load_state_dict(state_dict)
-        t1 = time.process_time()
+        t1 = time.time()
         for i in range(0,3):
             y = model(x)
             print("x")
-        t2 = time.process_time()
+        t2 = time.time()
         interval = (t2-t1)/3
         fps = 1/interval
         print("Average FPS for salicon_A was "+str(fps))
+        print("Average time for salicon_A was "+str(interval))
 
         model = fastsal.fastsal(pretrain_mode=False, model_type='C')
         state_dict, opt_state = load_weight(coco_c, remove_decoder=False)
         model.load_state_dict(state_dict)
-        t1 = time.process_time()
+        t1 = time.time()
         for i in range(0,3):
             y = model(x)
             print("x")
-        t2 = time.process_time()
+        t2 = time.time()
         interval = (t2-t1)/3
         fps = 1/interval
         print("Average FPS for coco_C was "+str(fps))
+        print("Average time for coco_C was "+str(interval))
 
         model = fastsal.fastsal(pretrain_mode=False, model_type='C')
         state_dict, opt_state = load_weight(salicon_c, remove_decoder=False)
         model.load_state_dict(state_dict)
-        t1 = time.process_time()
+        t1 = time.time()
         for i in range(0,3):
             y = model(x)
             print("x")
-        t2 = time.process_time()
+        t2 = time.time()
         interval = (t2-t1)/3
         fps = 1/interval
         print("Average FPS for salicon_C was "+str(fps))
+        print("Average time for salicon_C was "+str(interval))
 
     print('All model loaded and tested')
