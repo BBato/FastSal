@@ -16,6 +16,11 @@ if __name__ == '__main__':
         model = fastsal.fastsal(pretrain_mode=False, model_type='A')
         state_dict, opt_state = load_weight(coco_a, remove_decoder=False)
         model.load_state_dict(state_dict)
+
+        model = torch.quantization.quantize_dynamic(
+            model, {torch.nn.LSTM, torch.nn.Linear}, dtype=torch.qint8
+        )
+
         t1 = time.time()
         for i in range(0,3):
             y = model(x)
@@ -29,6 +34,9 @@ if __name__ == '__main__':
         model = fastsal.fastsal(pretrain_mode=False, model_type='A')
         state_dict, opt_state = load_weight(salicon_a, remove_decoder=False)
         model.load_state_dict(state_dict)
+        model = torch.quantization.quantize_dynamic(
+            model, {torch.nn.LSTM, torch.nn.Linear}, dtype=torch.qint8
+        )
         t1 = time.time()
         for i in range(0,3):
             y = model(x)
@@ -42,6 +50,9 @@ if __name__ == '__main__':
         model = fastsal.fastsal(pretrain_mode=False, model_type='C')
         state_dict, opt_state = load_weight(coco_c, remove_decoder=False)
         model.load_state_dict(state_dict)
+        model = torch.quantization.quantize_dynamic(
+            model, {torch.nn.LSTM, torch.nn.Linear}, dtype=torch.qint8
+        )
         t1 = time.time()
         for i in range(0,3):
             y = model(x)
@@ -55,6 +66,9 @@ if __name__ == '__main__':
         model = fastsal.fastsal(pretrain_mode=False, model_type='C')
         state_dict, opt_state = load_weight(salicon_c, remove_decoder=False)
         model.load_state_dict(state_dict)
+        model = torch.quantization.quantize_dynamic(
+            model, {torch.nn.LSTM, torch.nn.Linear}, dtype=torch.qint8
+        )
         t1 = time.time()
         for i in range(0,3):
             y = model(x)

@@ -26,7 +26,10 @@ if __name__ == '__main__':
     model = fastsal.fastsal(pretrain_mode=False, model_type='A')
     state_dict, opt_state = load_weight('weights/{}_{}.pth'.format('salicon', 'A'), remove_decoder=False)
     model.load_state_dict(state_dict)
-
+    model = torch.quantization.quantize_dynamic(
+        model, {torch.nn.LSTM, torch.nn.Linear}, dtype=torch.qint8
+    )
+    
     # define a video capture object 
     vid = cv2.VideoCapture(0) 
 
