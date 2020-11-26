@@ -2,6 +2,7 @@ import model.fastSal as fastsal
 from utils import load_weight
 from dataset.utils import resize_interpolate, pytorch_normalze
 import torch
+import torchvision
 import cv2
 import numpy as np
 from PIL import Image
@@ -54,14 +55,21 @@ if __name__ == "__main__":
         t1 = time.process_time()
 
         # Capture the video frame by frame
-        ret, frame = vid.read()
+        #ret, frame = vid.read()
 
         # Resize to standard size
-        frame = cv2.resize(frame, (320, 240), interpolation=cv2.INTER_AREA)
+        #frame = cv2.resize(frame, (320, 240), interpolation=cv2.INTER_AREA)
 
         # Convert to PIL object
-        cv2_im = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        pil_im = Image.fromarray(cv2_im)
+        #cv2_im = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        #pil_im = Image.fromarray(cv2_im)
+        a = torch.zeros((3,240,320))
+        
+        
+        #b = a.numpy()
+        pil_im = torchvision.transforms.ToPILImage()(a)
+        #print(cv2_im.shape)
+        #exit()
         pil_im = pil_im.convert("RGB")
         x, camera_image_size = convert_vgg_img(pil_im, (192, 256))
         x = x[np.newaxis, :, :, :]
@@ -78,7 +86,7 @@ if __name__ == "__main__":
         for i, prediction in enumerate(y[:, 0, :, :]):
             img_data = post_process_png(prediction, camera_image_size)
             cv2.imshow("img_output_path", img_data)
-            cv2.imshow("original", frame)
+            #cv2.imshow("original", frame)
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
