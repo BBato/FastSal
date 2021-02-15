@@ -19,7 +19,7 @@ def post_process_png(prediction, original_shape):
     prediction = cv2.resize(prediction, (original_shape[0], original_shape[1]),
                             interpolation=cv2.INTER_CUBIC)
     prediction = cv2.GaussianBlur(prediction, (5, 5), 0)
-    #prediction = normalize_map(prediction)
+    prediction = normalize_map(prediction)
     prediction = np.clip(prediction, 0, 255)
     return prediction
 

@@ -15,6 +15,11 @@ def exportToONNX(weights, model_type, output):
     model.load_state_dict(state_dict)
     model.eval()
     torch_out = model(x)
+
+
+    with torch.no_grad():
+        model.decoder.store_inverse()
+
     torch.onnx.export(
         model,  # model being run
         x,  # model input (or a tuple for multiple inputs)
@@ -28,19 +33,19 @@ def exportToONNX(weights, model_type, output):
 
 
 # Input weights
-x = torch.zeros((1, 3, 192, 256))
+x = torch.randn(1, 3, 224, 224, device='cpu')
 
 print("Exporting FastSal Coco A to .onnx...")
-exportToONNX("weights/coco_A.pth", "A", "onnx/cocoA/fastsal.onnx")
+exportToONNX("weights/coco_A.pth", "A", "onnx/cocoA/fastsal_64_80.onnx")
 
-print("Exporting FastSal Coco C to .onnx...")
-exportToONNX("weights/coco_C.pth", "C", "onnx/cocoC/fastsal.onnx")
+# print("Exporting FastSal Coco C to .onnx...")
+# exportToONNX("weights/coco_C.pth", "C", "onnx/cocoC/fastsal.onnx")
 
-print("Exporting FastSal Salicon A to .onnx...")
-exportToONNX("weights/salicon_A.pth", "A", "onnx/saliconA/fastsal.onnx")
+# print("Exporting FastSal Salicon A to .onnx...")
+# exportToONNX("weights/salicon_A.pth", "A", "onnx/saliconA/fastsal.onnx")
 
-print("Exporting FastSal Salicon C to .onnx...")
-exportToONNX("weights/salicon_C.pth", "C", "onnx/saliconC/fastsal.onnx")
+# print("Exporting FastSal Salicon C to .onnx...")
+# exportToONNX("weights/salicon_C.pth", "C", "onnx/saliconC/fastsal.onnx")
 
 print("Finished.")
 
