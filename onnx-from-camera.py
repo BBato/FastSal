@@ -14,33 +14,62 @@ from threading import Thread
 from imutils.video import FPS
 import imutils
 import maestro
+from multiprocessing import Pool,TimeoutError 
+import multiprocessing
+import math
+
 
 servo = maestro.Controller()
-servo.setAccel(0,10)      #set servo 0 acceleration to 4
-servo.setSpeed(0,100)     #set speed of servo 1
-servo.setAccel(1,10)      #set servo 0 acceleration to 4
-servo.setSpeed(1,100)     #set speed of servo 1
+servo.setAccel(0,6)      #set servo 0 acceleration to 4
+servo.setSpeed(0,6)     #set speed of servo 1
+servo.setAccel(1,6)      #set servo 0 acceleration to 4
+servo.setSpeed(1,6)     #set speed of servo 1
 
 servoRangeYaw = [1,9999]
-servoRangePitch = [5000, 9999]
+servoRangePitch = [7000, 9999]
 
-servo_channel_pitch = 1
-servo_channel_yaw = 0
+servo_channel_pitch = 5
+servo_channel_yaw = 4
 
 global servoPitch
 global servoYaw
 servoPitch = 7500
 servoYaw = 5000
 
+def resetCamPosition():
+    servo.setTarget(servo_channel_pitch, 7500)
+    servo.setTarget(servo_channel_yaw, 5000)
 
 def adjustCam(errorX, errorY):
     global servoYaw
     global servoPitch
-    print("errorX: "+str(errorX))
-    print("errorY: "+str(errorY))
+    """     print("errorX: "+str(errorX))
+    print("errorY: "+str(errorY)) """
 
-    servoYaw = servoYaw + errorY
-    servoPitch = servoPitch + errorX
+    speed = 100
+    # if(errorX > 3):
+    #     movementX = speed
+    # elif(errorX < -3):
+    #     movementX = -speed
+    # else:
+    #     movementX = 0
+
+    # if(errorY > 3):
+    #     movementY = speed
+    # elif(errorY < -3):
+    #     movementY = -speed
+    # else:
+    #     movementY = 0
+
+    if(errorX>0):
+        servoPitch = int(servoPitch + math.pow(errorX, 1.3))
+    elif(errorX<0):
+        servoPitch = int(servoPitch - math.pow(-errorX, 1.3))
+
+    if(errorY>0):
+        servoYaw = int(servoYaw + math.pow(errorY, 1.3))
+    elif(errorY<0):
+        servoYaw = int(servoYaw - math.pow(-errorY, 1.3))
 
     if(servoYaw>servoRangeYaw[1]):
         servoYaw = servoRangeYaw[1]
@@ -116,6 +145,8 @@ class PiVideoStream:
         # indicate that the thread should be stopped
         self.stopped = True
 
+# class FastSalRunner:
+
 def convert_vgg_img(src, target_size):
     vgg_img = src
     original_size = vgg_img.size
@@ -141,96 +172,170 @@ def to_numpy(tensor):
         else tensor.cpu().numpy()
     )
 
-def action():
+def onnx(x):
+    
+    # Run model
+    ort_inputs = {ort_session.get_inputs()[0].name: to_numpy(x)}
+    ort_outs = ort_session.run(None, ort_inputs)
+    y = ort_outs[0]
+    
+    return y
 
-    t1 = time.process_time()
+
+def capture():
 
     # Capture the video frame by frame
     original_frame = vs.read()
     original_frame = cv2.flip(original_frame,-1)
 
+    # cv2.imshow("original", original_frame)
+    # if cv2.waitKey(1) & 0xFF == ord("q"):
+    #     # After the loop release the cap object
+    #     vid.release()
+
+    #     # Destroy all the windows
+    #     cv2.destroyAllWindows()
+    #     return
+    # return
+
     # Resize to standard size
-    frame = cv2.resize(original_frame, (320, 240), interpolation=cv2.INTER_AREA)
+    frame = original_frame#cv2.resize(original_frame, (320, 240), interpolation=cv2.INTER_AREA)
 
     # Convert to PIL object
     cv2_im = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     pil_im = Image.fromarray(cv2_im)
     
     pil_im = pil_im.convert("RGB")
-    x, camera_image_size = convert_vgg_img(pil_im, (192, 256))
+    camera_image_size = (128, 96)
+    x, _ = convert_vgg_img(pil_im, (96, 128))
     x = x[np.newaxis, :, :, :]
 
-    # Run model
-    ort_inputs = {ort_session.get_inputs()[0].name: to_numpy(x)}
-    ort_outs = ort_session.run(None, ort_inputs)
-    y = ort_outs[0]
+    return x, camera_image_size, original_frame
+    
 
 
 
+def visualize(y, camera_image_size, original_frame):
+    
     # Prepare for display
     y = torch.nn.Sigmoid()(torch.tensor(y))
 
     y = y.detach().numpy()
+
     for i, prediction in enumerate(y[:, 0, :, :]):
+
+        prediction = post_process_png(prediction, camera_image_size)
+        prediction = np.repeat(prediction[:, :, np.newaxis], 3, axis=2)
+
+        img_uint8 = np.uint8(prediction*255)
+
+        # converting image into grayscale image 
+        gray = cv2.cvtColor(img_uint8, cv2.COLOR_BGR2GRAY) 
         
-        img_data = post_process_png(prediction, camera_image_size)
-        result = np.where(img_data == np.amax(img_data))
-        listOfCordinates = list(zip(result[0], result[1]))
+        # setting threshold of gray image 
+        _, threshold = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY) 
         
-        c_x = listOfCordinates[0][0]
-        c_y = listOfCordinates[0][1]
+        # using a findContours() function 
+        contours, _ = cv2.findContours( 
+            threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
 
+        sumX = 0
+        sumY = 0
+        for c in contours:
+            sumX += c[0][0][0]
+            sumY += c[0][0][1]
+        length = len(contours)
+        cX = int(sumX/length)
+        cY = int(sumY/length)
 
-        original_frame[listOfCordinates[0][0]][listOfCordinates[0][1]] = [255,0,0]
-        original_frame[120][160] = [255,255,255]
+        prediction = cv2.circle(prediction, (cX, cY), 1, (255,0,0), 5)
 
-        adjustCam(120 - c_x, c_y - 160)
+        errorX = int(cX - camera_image_size[0]/2)
+        errorY = int(camera_image_size[1]/2 - cY)
+        center = cv2.circle(prediction, (int(camera_image_size[0]/2), int(camera_image_size[1]/2)), 1, (0,255,0), 5)
+        adjustCam(errorY, errorX )
 
-        cv2.imshow("img_output_path", img_data)
-        cv2.imshow("original", original_frame)
-        
-    
+        cv2.imshow("threshold", prediction)
+        cv2.waitKey(1)
 
+            
     if cv2.waitKey(1) & 0xFF == ord("q"):
         # After the loop release the cap object
         vid.release()
 
         # Destroy all the windows
         cv2.destroyAllWindows()
-        return
+        exit()
 
-    t2 = time.process_time()
-    interval = t2 - t1
-    fps = 1 / interval
-    print("FPS: " + str(fps))
 
+def loop(x, camera_image_size, original_frame):
+    y = onnx(x)
+    visualize(y, camera_image_size, original_frame)
 
 
 if __name__ == "__main__":
 
-    print("Loading model...")
-    ort_session = onnxruntime.InferenceSession("onnx/cocoA/fastsal.onnx")
+    resetCamPosition()
+
+    sess_options = onnxruntime.SessionOptions()
+    # Set graph optimization level to ORT_ENABLE_EXTENDED to enable bert optimization.
+    sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+    # Use OpenMP optimizations. Only useful for CPU, has little impact for GPUs.
+    sess_options.intra_op_num_threads = multiprocessing.cpu_count()
+
+    ort_session = onnxruntime.InferenceSession("onnx/cocoA/fastsal_96_128.onnx", sess_options)
 
     # created a *threaded *video stream, allow the camera sensor to warmup,
     # and start the FPS counter
-    print("[INFO] sampling THREADED frames from `picamera` module...")
     vs = PiVideoStream().start()
     time.sleep(2.0)
-    fps = FPS()
+
+    # period = 1
+    # halfPeriod = period/2
+    # with Pool(processes=2) as pool:
+
+    #     x, camera_image_size, original_frame = capture()
+    #     print('capture #1 ready')
+    #     r2 = pool.apply_async(loop, (x, camera_image_size, original_frame))
+    #     print('r2 started')
+    #     time.sleep(halfPeriod)
+
+    #     while True:
     
+    #         # x, camera_image_size, original_frame = capture()
+    #         # print('capture #2 ready')
+    #         # r1 = pool.apply_async(loop, (x, camera_image_size, original_frame))
+    #         # print('r1 started')
+    #         # time.sleep(halfPeriod)
+
+    #         r2.get()
+    #         print('r2 finished')
+    #         x, camera_image_size, original_frame = capture()
+    #         print('capture #1 ready')
+    #         r2 = pool.apply_async(loop, (x, camera_image_size, original_frame))
+    #         print('r2 started')
+    #         time.sleep(halfPeriod)
+
+    #         # r1.get()
+
+
+
     while True:
-        fps.start()
-        action()
-        fps.stop()
+        x, camera_image_size, original_frame = capture()
+        loop(x, camera_image_size, original_frame)
 
 
-    # # define a video capture object
-    # vid = cv2.VideoCapture(0)
-
-    # print("Scheduling interval")
-    # # inter=setInterval(1,action)
-
-    # while(True):
-    #     action()
+        #showCameraFeed(original_frame)
 
 
+def showCameraFeed(original_frame):
+    cv2.imshow('original_frame',original_frame)
+
+                    
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        # After the loop release the cap object
+        vid.release()
+
+        # Destroy all the windows
+        cv2.destroyAllWindows()
+        exit()
