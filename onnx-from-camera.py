@@ -17,7 +17,7 @@ import maestro
 from multiprocessing import Pool,TimeoutError 
 import multiprocessing
 import math
-
+from simple_pid import PID
 
 servo = maestro.Controller()
 servo.setAccel(0,6)      #set servo 0 acceleration to 4
@@ -26,7 +26,7 @@ servo.setAccel(1,6)      #set servo 0 acceleration to 4
 servo.setSpeed(1,6)     #set speed of servo 1
 
 servoRangeYaw = [1,9999]
-servoRangePitch = [7000, 9999]
+servoRangePitch = [4500, 7000]
 
 servo_channel_pitch = 5
 servo_channel_yaw = 4
@@ -36,40 +36,44 @@ global servoYaw
 servoPitch = 7500
 servoYaw = 5000
 
+global pitchDelta1
+global pitchDelta2
+pitchDelta1 = 0
+pitchDelta2 = 0
+
+pid1 = PID(Kp=3, Ki=0.4, Kd=0.1, setpoint=0)
+pid1.output_limits = (-1000, 1000)
+pid2 = PID(Kp=5, Ki=0.1, Kd=0.01, setpoint=0)
+pid2.output_limits = (-1000, 1000)
+
+global start_time
+global last_time
+start_time = time.time()
+last_time = start_time
+
 def resetCamPosition():
-    servo.setTarget(servo_channel_pitch, 7500)
+    servo.setTarget(servo_channel_pitch, 7000)
     servo.setTarget(servo_channel_yaw, 5000)
 
 def adjustCam(errorX, errorY):
+
+
     global servoYaw
     global servoPitch
-    """     print("errorX: "+str(errorX))
-    print("errorY: "+str(errorY)) """
+    global start_time
+    global last_time
+    global pitchDelta1
+    global pitchDelta2
+    
+    current_time = time.time()
+    pitchDelta1 = -pid1(errorY)
+    pitchDelta2 = -pid2(errorX)
+    
+    if(abs(pitchDelta1)>5):
+        servoYaw = int(servoYaw+pitchDelta1)
 
-    speed = 100
-    # if(errorX > 3):
-    #     movementX = speed
-    # elif(errorX < -3):
-    #     movementX = -speed
-    # else:
-    #     movementX = 0
-
-    # if(errorY > 3):
-    #     movementY = speed
-    # elif(errorY < -3):
-    #     movementY = -speed
-    # else:
-    #     movementY = 0
-
-    if(errorX>0):
-        servoPitch = int(servoPitch + math.pow(errorX, 1.3))
-    elif(errorX<0):
-        servoPitch = int(servoPitch - math.pow(-errorX, 1.3))
-
-    if(errorY>0):
-        servoYaw = int(servoYaw + math.pow(errorY, 1.3))
-    elif(errorY<0):
-        servoYaw = int(servoYaw - math.pow(-errorY, 1.3))
+    if(abs(pitchDelta2)>5):
+        servoPitch = int(servoPitch+pitchDelta2)
 
     if(servoYaw>servoRangeYaw[1]):
         servoYaw = servoRangeYaw[1]
@@ -77,8 +81,10 @@ def adjustCam(errorX, errorY):
     if(servoYaw<servoRangeYaw[0]):
         servoYaw = servoRangeYaw[0]
 
+    last_time = current_time
+
     if(servoPitch>servoRangePitch[1]):
-        servoPitch = servoRangePitch[1]
+         servoPitch = servoRangePitch[1]
 
     if(servoPitch<servoRangePitch[0]):
         servoPitch = servoRangePitch[0]
@@ -87,6 +93,26 @@ def adjustCam(errorX, errorY):
     servo.setTarget(servo_channel_yaw, servoYaw)
 
 
+
+class KeyboardThread(threading.Thread):
+
+    def __init__(self, input_cbk = None, name='keyboard-input-thread'):
+        self.input_cbk = input_cbk
+        super(KeyboardThread, self).__init__(name=name)
+        self.start()
+
+    def run(self):
+        while True:
+            self.input_cbk(input()) #waits to get input + Return
+
+def my_callback(inp):
+    #evaluate the keyboard input
+    a = inp.split(',')
+    pid1.tunings = (float(a[0]), float(a[1]), float(a[2]))
+    print(pid1.tunings)
+
+#start the Keyboard thread
+kthread = KeyboardThread(my_callback)
 
 class setInterval :
     def __init__(self,interval,action) :
