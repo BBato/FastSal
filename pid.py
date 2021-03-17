@@ -20,20 +20,20 @@ import math
 from simple_pid import PID
 
 servo = maestro.Controller()
-servo.setAccel(0,100)      #set servo 0 acceleration to 4
-servo.setSpeed(0,100)     #set speed of servo 1
-servo.setAccel(1,100)      #set servo 0 acceleration to 4
-servo.setSpeed(1,100)     #set speed of servo 1
+servo.setAccel(0,6)      #set servo 0 acceleration to 4
+servo.setSpeed(0,6)     #set speed of servo 1
+servo.setAccel(1,6)      #set servo 0 acceleration to 4
+servo.setSpeed(1,6)     #set speed of servo 1
 
 servoRangeYaw = [1,9999]
-servoRangePitch = [4500, 6000]
+servoRangePitch = [4500, 7000]
 
 servo_channel_pitch = 5
 servo_channel_yaw = 4
 
 global servoPitch
 global servoYaw
-servoPitch = 5500
+servoPitch = 7500
 servoYaw = 5000
 
 global pitchDelta1
@@ -41,15 +41,10 @@ global pitchDelta2
 pitchDelta1 = 0
 pitchDelta2 = 0
 
-global pX
-global pY
-pX = None
-pY = None
-
-pid1 = PID(Kp=5, Ki=0.01, Kd=0 , setpoint=0)
+pid1 = PID(Kp=3, Ki=0.4, Kd=0.1, setpoint=0)
 pid1.output_limits = (-1000, 1000)
-pid2 = PID(Kp=5, Ki=0.01, Kd=0, setpoint=0)
-pid2.output_limits = (-100, 100)
+pid2 = PID(Kp=5, Ki=0.1, Kd=0.01, setpoint=0)
+pid2.output_limits = (-1000, 1000)
 
 global start_time
 global last_time
@@ -57,10 +52,11 @@ start_time = time.time()
 last_time = start_time
 
 def resetCamPosition():
-    servo.setTarget(servo_channel_pitch, servoPitch)
-    servo.setTarget(servo_channel_yaw, servoYaw)
+    servo.setTarget(servo_channel_pitch, 5500)
+    servo.setTarget(servo_channel_yaw, 5000)
 
 def adjustCam(errorX, errorY):
+
 
     global servoYaw
     global servoPitch
@@ -72,30 +68,30 @@ def adjustCam(errorX, errorY):
     current_time = time.time()
     pitchDelta1 = -pid1(errorY)
     pitchDelta2 = -pid2(errorX)
-
+    
     if(abs(pitchDelta1)>5):
         servoYaw = int(servoYaw+pitchDelta1)
-    elif(abs(pitchDelta1)>2):
-        servoYaw = int(servoYaw+pitchDelta1*0.2)
-
-    if(servoYaw>servoRangeYaw[1]):
-        servoYaw = servoRangeYaw[1]
-    if(servoYaw<servoRangeYaw[0]):
-        servoYaw = servoRangeYaw[0]
-    servo.setTarget(servo_channel_yaw, servoYaw)
 
     if(abs(pitchDelta2)>5):
         servoPitch = int(servoPitch+pitchDelta2)
-    elif(abs(pitchDelta2)>2):
-        servoPitch = int(servoPitch+pitchDelta2*0.2)
 
-    if(servoPitch>servoRangePitch[1]):
-        servoPitch = servoRangePitch[1]
-    if(servoPitch<servoRangePitch[0]):
-        servoPitch = servoRangePitch[0]
-    servo.setTarget(servo_channel_pitch, servoPitch)
+    if(servoYaw>servoRangeYaw[1]):
+        servoYaw = servoRangeYaw[1]
+
+    if(servoYaw<servoRangeYaw[0]):
+        servoYaw = servoRangeYaw[0]
 
     last_time = current_time
+
+    if(servoPitch>servoRangePitch[1]):
+         servoPitch = servoRangePitch[1]
+
+    if(servoPitch<servoRangePitch[0]):
+        servoPitch = servoRangePitch[0]
+
+    servo.setTarget(servo_channel_pitch, servoPitch)
+    servo.setTarget(servo_channel_yaw, servoYaw)
+
 
 
 class KeyboardThread(threading.Thread):
@@ -110,10 +106,15 @@ class KeyboardThread(threading.Thread):
             self.input_cbk(input()) #waits to get input + Return
 
 def my_callback(inp):
+    global servoYaw
     #evaluate the keyboard input
     a = inp.split(',')
-    pid1.tunings = (float(a[0]), float(a[1]), float(a[2]))
-    print(pid1.tunings)
+    
+    """ pid1.tunings = (float(a[0]), float(a[1]), float(a[2]))
+    print(pid1.tunings) """
+
+    servoYaw = servoYaw+int(a[0])
+    servo.setTarget(servo_channel_yaw, servoYaw)
 
 #start the Keyboard thread
 kthread = KeyboardThread(my_callback)
@@ -246,9 +247,7 @@ def capture():
 
 
 def visualize(y, camera_image_size, original_frame):
-    global pX
-    global pY
-
+    
     # Prepare for display
     y = torch.nn.Sigmoid()(torch.tensor(y))
 
@@ -265,59 +264,28 @@ def visualize(y, camera_image_size, original_frame):
         gray = cv2.cvtColor(img_uint8, cv2.COLOR_BGR2GRAY) 
         
         # setting threshold of gray image 
-        _, threshold = cv2.threshold(gray, 160, 255, cv2.THRESH_BINARY) 
+        _, threshold = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY) 
         
         # using a findContours() function 
         contours, _ = cv2.findContours( 
             threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
 
-        top = None
-        bottom = None
-        left = None
-        right = None
-        
-        for c in contours[0]:
+        sumX = 0
+        sumY = 0
+        for c in contours:
+            sumX += c[0][0][0]
+            sumY += c[0][0][1]
+        length = len(contours)
+        cX = int(sumX/length)
+        cY = int(sumY/length)
 
-            cnX = c[0][0]
-            cnY = c[0][1]
+        prediction = cv2.circle(prediction, (cX, cY), 1, (255,0,0), 5)
 
-            """ if(pX):
-                if(abs(cnX-pX)>50 or abs(cnY-pY)>50):
-                    return """
-
-            if(right is None or cnX > right):
-                right = cnX
-            if(left is None or cnX < left):
-                left = cnX
-            if(bottom is None or cnY > bottom):
-                bottom = cnY
-            if(top is None or cnY < top):
-                top = cnY
-        
-        #cv2.drawContours(prediction, contours, 0, (255,255,0), 2)
-
-        cX = int((left+right)/2)
-        cY = int((top+bottom)/2)
-
-        if pX is None:
-            pX = int(camera_image_size[0]/2)
-            pY = int(camera_image_size[1]/2)
-        else:
-            dX = cX - pX
-            pX += int(dX *0.85)
-            dY = cY - pY
-            pY += int(dY *0.85)
-
-        prediction = cv2.circle(prediction, (pX, pY), 1, (255,0,0), 5)
-
-        errorX = int(pX - camera_image_size[0]/2)
-        errorY = int(camera_image_size[1]/2 - pY)
-
-
-
-
+        errorX = int(cX - camera_image_size[0]/2)
+        errorY = int(camera_image_size[1]/2 - cY)
         center = cv2.circle(prediction, (int(camera_image_size[0]/2), int(camera_image_size[1]/2)), 1, (0,255,0), 5)
-        adjustCam(errorY, errorX )
+        #adjustCam(errorY, errorX )
+        print('errorX',errorX)
 
         cv2.imshow("threshold", prediction)
         cv2.waitKey(1)
