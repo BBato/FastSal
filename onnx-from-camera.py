@@ -19,83 +19,30 @@ import multiprocessing
 import math
 from simple_pid import PID
 
+global servo
 servo = maestro.Controller()
 servo.setAccel(0,100)      #set servo 0 acceleration to 4
 servo.setSpeed(0,100)     #set speed of servo 1
 servo.setAccel(1,100)      #set servo 0 acceleration to 4
 servo.setSpeed(1,100)     #set speed of servo 1
 
-servoRangeYaw = [1,9999]
-servoRangePitch = [4500, 6000]
 
-servo_channel_pitch = 5
-servo_channel_yaw = 4
-
-global servoPitch
-global servoYaw
-servoPitch = 5500
-servoYaw = 5000
-
-global pitchDelta1
-global pitchDelta2
-pitchDelta1 = 0
-pitchDelta2 = 0
 
 global pX
 global pY
 pX = None
 pY = None
 
-pid1 = PID(Kp=5, Ki=0.01, Kd=0 , setpoint=0)
-pid1.output_limits = (-1000, 1000)
-pid2 = PID(Kp=5, Ki=0.01, Kd=0, setpoint=0)
-pid2.output_limits = (-100, 100)
 
-global start_time
-global last_time
-start_time = time.time()
-last_time = start_time
-
-def resetCamPosition():
-    servo.setTarget(servo_channel_pitch, servoPitch)
-    servo.setTarget(servo_channel_yaw, servoYaw)
-
-def adjustCam(errorX, errorY):
-
-    global servoYaw
+def patrol():
+    global patrolling
     global servoPitch
-    global start_time
-    global last_time
-    global pitchDelta1
-    global pitchDelta2
-    
-    current_time = time.time()
-    pitchDelta1 = -pid1(errorY)
-    pitchDelta2 = -pid2(errorX)
-
-    if(abs(pitchDelta1)>5):
-        servoYaw = int(servoYaw+pitchDelta1)
-    elif(abs(pitchDelta1)>2):
-        servoYaw = int(servoYaw+pitchDelta1*0.2)
-
-    if(servoYaw>servoRangeYaw[1]):
-        servoYaw = servoRangeYaw[1]
-    if(servoYaw<servoRangeYaw[0]):
-        servoYaw = servoRangeYaw[0]
+    global servoYaw
+    servoPitch += int((initialPitch - servoPitch)*0.1)
+    servoYaw += int((initialYaw - servoYaw)*0.1)
+    servo.setTarget(servo_channel_pitch, servoPitch)
     servo.setTarget(servo_channel_yaw, servoYaw)
 
-    if(abs(pitchDelta2)>5):
-        servoPitch = int(servoPitch+pitchDelta2)
-    elif(abs(pitchDelta2)>2):
-        servoPitch = int(servoPitch+pitchDelta2*0.2)
-
-    if(servoPitch>servoRangePitch[1]):
-        servoPitch = servoRangePitch[1]
-    if(servoPitch<servoRangePitch[0]):
-        servoPitch = servoRangePitch[0]
-    servo.setTarget(servo_channel_pitch, servoPitch)
-
-    last_time = current_time
 
 
 class KeyboardThread(threading.Thread):
@@ -118,22 +65,7 @@ def my_callback(inp):
 #start the Keyboard thread
 kthread = KeyboardThread(my_callback)
 
-class setInterval :
-    def __init__(self,interval,action) :
-        self.interval=interval
-        self.action=action
-        self.stopEvent=threading.Event()
-        thread=threading.Thread(target=self.__setInterval)
-        thread.start()
 
-    def __setInterval(self) :
-        nextTime=time.time()+self.interval
-        while not self.stopEvent.wait(nextTime-time.time()) :
-            nextTime+=self.interval
-            self.action()
-
-    def cancel(self) :
-        self.stopEvent.set()
 
 class PiVideoStream:
     def __init__(self, resolution=(320, 240), framerate=32):
@@ -153,6 +85,7 @@ class PiVideoStream:
         # start the thread to read frames from the video stream
         Thread(target=self.update, args=()).start()
         return self
+
     def update(self):
         # keep looping infinitely until the thread is stopped
         for f in self.stream:
@@ -175,7 +108,53 @@ class PiVideoStream:
         # indicate that the thread should be stopped
         self.stopped = True
 
-# class FastSalRunner:
+
+
+class ServoController:
+    def __init__(self, channel, controller, output_limits, servo_range, initial_position):
+        self.controller = controller
+        self.controller.output_limits = output_limits
+        self.servo_range = servo_range
+        self.channel = channel
+        self.current_position = initial_position
+        self.initial_position = initial_position
+        self.lastError = 0
+        self.lastTime = time.time_ns()
+        servo.setTarget(self.channel, self.current_position)
+
+    def updateError(self, newError):
+        self.lastError = newError
+
+    def start(self):
+        Thread(target=self.update, args=()).start()
+        return self
+
+    def update(self):
+
+        while True:
+
+            if(time.time_ns() > self.lastTime + 5):
+
+                delta = -self.controller(self.lastError)
+                #print(delta)
+
+                #if(abs(delta)>5):
+                self.current_position = self.current_position+delta
+                #elif(abs(pitchDelta1)>2):
+                #    servoYaw = int(servoYaw+pitchDelta1/abs(pitchDelta1))
+                #print(delta)
+                if(self.current_position>self.servo_range[1]):
+                    self.current_position = self.servo_range[1]
+                if(self.current_position<self.servo_range[0]):
+                    self.current_position = self.servo_range[0]
+
+                servo.setTarget(self.channel, int(self.current_position))
+                self.lastTime = time.time_ns()
+
+    def stop(self):
+        # indicate that the thread should be stopped
+        self.stopped = True
+
 
 def convert_vgg_img(src, target_size):
     vgg_img = src
@@ -217,6 +196,7 @@ def capture():
     # Capture the video frame by frame
     original_frame = vs.read()
     original_frame = cv2.flip(original_frame,-1)
+    global input_image
 
     # cv2.imshow("original", original_frame)
     # if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -237,8 +217,8 @@ def capture():
     
     pil_im = pil_im.convert("RGB")
     camera_image_size = (128, 96)
-    x, _ = convert_vgg_img(pil_im, (96, 128))
-    x = x[np.newaxis, :, :, :]
+    input_image, _ = convert_vgg_img(pil_im, (96, 128))
+    x = input_image[np.newaxis, :, :, :]
 
     return x, camera_image_size, original_frame
     
@@ -259,67 +239,95 @@ def visualize(y, camera_image_size, original_frame):
         prediction = post_process_png(prediction, camera_image_size)
         prediction = np.repeat(prediction[:, :, np.newaxis], 3, axis=2)
 
+        small_original = cv2.resize(original_frame, (128,96))
+        cv2.imshow('original', small_original)
+
         img_uint8 = np.uint8(prediction*255)
 
         # converting image into grayscale image 
         gray = cv2.cvtColor(img_uint8, cv2.COLOR_BGR2GRAY) 
         
         # setting threshold of gray image 
-        _, threshold = cv2.threshold(gray, 160, 255, cv2.THRESH_BINARY) 
-        
+        #ret, threshold = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        ret, threshold = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+        #kernel = np.ones((3,3), np.uint8)       
+        #threshold = cv2.erode(threshold, kernel, iterations=5)
+
         # using a findContours() function 
         contours, _ = cv2.findContours( 
             threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
+
 
         top = None
         bottom = None
         left = None
         right = None
-        
-        for c in contours[0]:
 
-            cnX = c[0][0]
-            cnY = c[0][1]
+        if len(contours)>0 and len(contours[0])>0: 
 
-            """ if(pX):
-                if(abs(cnX-pX)>50 or abs(cnY-pY)>50):
-                    return """
+            for c in contours[0]:
 
-            if(right is None or cnX > right):
-                right = cnX
-            if(left is None or cnX < left):
-                left = cnX
-            if(bottom is None or cnY > bottom):
-                bottom = cnY
-            if(top is None or cnY < top):
-                top = cnY
-        
-        #cv2.drawContours(prediction, contours, 0, (255,255,0), 2)
+                cnX = c[0][0]
+                cnY = c[0][1]
 
-        cX = int((left+right)/2)
-        cY = int((top+bottom)/2)
+                if top is None:
+                    top = cnY
+                    bottom = cnY
+                    right = cnX
+                    left = cnX
+                    continue
 
-        if pX is None:
-            pX = int(camera_image_size[0]/2)
-            pY = int(camera_image_size[1]/2)
+                if(cnX > right):
+                    right = cnX
+                if(cnX < left):
+                    left = cnX
+                if(cnY > bottom):
+                    bottom = cnY
+                if(cnY < top):
+                    top = cnY
+            
+            cX = int((left+right)/2)
+            cY = int((top+bottom)/2)
+
+            if pX is None:
+                pX = int(camera_image_size[0]/2)
+                pY = int(camera_image_size[1]/2)
+            else:
+                dX = cX - pX
+                pX += int(dX *0.85)
+                dY = cY - pY
+                pY += int(dY *0.85)
+
+            prediction = cv2.circle(prediction, (pX, pY), 1, (255,0,0), 5)
+
+            errorX = int(pX - camera_image_size[0]/2)
+            errorY = int(camera_image_size[1]/2 - pY)
+
+            colorr = cv2.cvtColor(threshold.copy(), cv2.COLOR_GRAY2BGR) 
+            contourImage = cv2.drawContours(colorr, contours, 0, (0,128,255), 3)
+
+            if(len(contours)>0):
+                contourImage = cv2.drawContours(contourImage, contours, 0, (0,128,255), 3)
+            if(len(contours)>1):
+                contourImage = cv2.drawContours(contourImage, contours, 1, (255,128,0), 3)
+            if(len(contours)>2):
+                contourImage = cv2.drawContours(contourImage, contours, 2, (255,0,128), 3)
+
+            contourImage = cv2.circle(contourImage, (int(camera_image_size[0]/2), int(camera_image_size[1]/2)), 1, (0,255,0), 5)
+            contourImage = cv2.circle(contourImage, (pX, pY), 1, (255,0,0), 5)
+            cv2.imshow('contours', contourImage)
+
+            center = cv2.circle(prediction, (int(camera_image_size[0]/2), int(camera_image_size[1]/2)), 1, (0,255,0), 5)
+            yaw.updateError(errorX)
+            pitch.updateError(errorY)
+
         else:
-            dX = cX - pX
-            pX += int(dX *0.85)
-            dY = cY - pY
-            pY += int(dY *0.85)
+            contourImage = cv2.cvtColor(threshold.copy(), cv2.COLOR_GRAY2BGR) 
+            contourImage = cv2.circle(contourImage, (int(camera_image_size[0]/2), int(camera_image_size[1]/2)), 1, (0,255,0), 5)
+            cv2.imshow('contours', contourImage)
+            #patrol()
 
-        prediction = cv2.circle(prediction, (pX, pY), 1, (255,0,0), 5)
-
-        errorX = int(pX - camera_image_size[0]/2)
-        errorY = int(camera_image_size[1]/2 - pY)
-
-
-
-
-        center = cv2.circle(prediction, (int(camera_image_size[0]/2), int(camera_image_size[1]/2)), 1, (0,255,0), 5)
-        adjustCam(errorY, errorX )
-
-        cv2.imshow("threshold", prediction)
+        #cv2.imshow("threshold", prediction)
         cv2.waitKey(1)
 
             
@@ -339,7 +347,11 @@ def loop(x, camera_image_size, original_frame):
 
 if __name__ == "__main__":
 
-    resetCamPosition()
+    test_img = np.zeros(shape=(128,96,1)).astype('uint8')
+    cv2.imshow('original',test_img)
+    cv2.imshow('contours',test_img)
+    cv2.moveWindow('original',0,0)
+    cv2.moveWindow('contours',130,0)
 
     sess_options = onnxruntime.SessionOptions()
     # Set graph optimization level to ORT_ENABLE_EXTENDED to enable bert optimization.
@@ -352,6 +364,8 @@ if __name__ == "__main__":
     # created a *threaded *video stream, allow the camera sensor to warmup,
     # and start the FPS counter
     vs = PiVideoStream().start()
+    yaw = ServoController(4, PID(Kp=0.007, Ki=0.004, Kd=0.001 , setpoint=0), (-100, 100), [1,9999] , 5000).start()
+    pitch = ServoController(5, PID(Kp=0.007, Ki=0.004, Kd=0.001 , setpoint=0), (-100, 100), [4500, 6000] , 5500).start()
     time.sleep(2.0)
 
     # period = 1
