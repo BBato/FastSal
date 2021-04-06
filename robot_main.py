@@ -89,7 +89,6 @@ class ServoController:
         self.initial_position = initial_position
         self.lastError = 0
         self.lastTime = time.time()
-        self.ignoreFrames = 0
         servo.setTarget(self.channel, self.current_position)
 
     def updateError(self, newError):
@@ -168,7 +167,7 @@ if __name__ == "__main__":
     parser.add_argument('-yaw_Kd', action='store', dest='yaw_Kd',
                         help='PID controller: specify yaw K_d', default=0.15, type=float)
     parser.add_argument('-shutter_speed', action='store', dest='shutter_speed',
-                        help='Select camera shutter time in nanoseconds', default=2000, type=int)
+                        help='Select camera shutter time in microseconds', default=2000, type=int)
     args = parser.parse_args()
 
     captureInterval = args.interval
